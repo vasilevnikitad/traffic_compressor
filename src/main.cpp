@@ -8,6 +8,7 @@
 
 /* UNIX/LINUX specific headers */
 #include <netinet/in.h>
+#include <netinet/udp.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -22,6 +23,7 @@
 extern "C" {
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
+#include <libnetfilter_queue/libnetfilter_queue_udp.h>
 #include <libnetfilter_queue/pktbuff.h>
 }
 
@@ -61,11 +63,17 @@ static int nfq_q_cb(struct nfq_q_handle *q, struct nfgenmsg *, struct nfq_data *
     if (!ip)
         throw std::runtime_error("Unable to parse ip header");
 
-    if(ip->protocol == IPPROTO_UDP)  {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
-        for(int i{0}; i < raw_data_sz; i++)
-            std::cout << raw_data[i];
-        std::cout << std::endl;
+    if (nfq_ip_set_transport_header(pkt_buffer.get(), ip) < 0)
+        throw std::runtime_error("Unable to set transport header");
+
+    if (ip->protocol == IPPROTO_UDP)  {
+        udphdr const *const udp{nfq_udp_get_hdr(pkt_buffer.get())};
+        if (udp) {
+            std::cout << "udp->dest = " << htons(udp->dest) << std::endl;
+        } else {
+            std::cerr << "Unable to parse udp header" << std::endl;
+        }
+
     }
 
     return nfq_set_verdict(q, ntohl(ph->packet_id), NF_ACCEPT, 0, nullptr) ;
